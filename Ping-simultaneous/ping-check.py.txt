@@ -1,0 +1,52 @@
+import os
+from datetime import datetime
+import multiprocessing.dummy
+import multiprocessing
+import subprocess, re
+from subprocess import Popen, PIPE
+import requests
+import time
+
+
+# This function take ip address and run ip command and log the output in ip_output.txt file and send notification in slack
+def ping(ip):
+  slackurl = 'https://hooks.slack.com/services/<your_web_hook>'
+  cmd="ping -c 1 " + ip
+  p = subprocess.Popen(cmd, stdout=PIPE, stderr=None, shell=True) # runs ping in background
+
+  output = str(p.communicate()[0])
+  trim_output = re.search('Lost(.+?)loss', output)
+  now = datetime.now()
+  dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+
+  response = ''
+  if ', 0% packet loss' in output:
+    response = dt_string + ' Pinging: ' + ip +" is up \n"
+    print(response)
+  else:
+    response = dt_string + ' Pinging: ' + ip + " is down \n"
+    json_data = {
+      'text': response
+    }
+
+    slackresponse = requests.post(slackurl, json=json_data)
+    print(response)
+
+  f = open("ip_output.txt","a")
+  f.write(response)
+  f.close()
+
+# ping_range function runs ip in multi threaded function
+def ping_range(ip):
+    num_threads = 16 * multiprocessing.cpu_count()
+    p = multiprocessing.dummy.Pool(num_threads)
+    p.map(ping, [x for x in ip])
+
+# Calling ping_range function, taking ip from ip_list file
+if __name__ == "__main__":
+    with open("ip_list.txt") as file:
+      iplist = file.read()
+      iplist = iplist.splitlines()
+    while(True):
+      ping_range(iplist)
+      time.sleep(5)
